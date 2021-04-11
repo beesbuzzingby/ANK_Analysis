@@ -106,47 +106,72 @@ def analysis_dat(cooc_dat, succ_dat, feature, feature2, f_name, f_name2):
 # 'resp_lists', a list containing each participant's answers in list format
 # 'valid_resp_counts', a list of valid individual answers and their frequencies
 # 'valid_resps', a list of valid individual answers without frequencies
-for item in raw_dat.columns:
-    v = list(raw_dat.loc[:,item])
-    w = [([] if pd.isnull(resp) else re.findall("\[(.*?)\]", resp)) for resp in v]
-    items[item]['resp_lists'] = w
-    x = [r for r in [r for resps in w for r in resps] if validate(r, item)]
+def calc_cooccurrence():
+    for item in raw_dat.columns:
+        v = list(raw_dat.loc[:,item])
+        w = [([] if pd.isnull(resp) else re.findall("\[(.*?)\]", resp)) for resp in v]
+        items[item]['resp_lists'] = w
+        x = [r for r in [r for resps in w for r in resps] if validate(r, item)]
 
-    items[item]['valid_resp_counts'] = Counter(x).most_common()
-    items[item]['valid_resps'] = [resp for (resp, count) in items[item]['valid_resp_counts']]
+        items[item]['valid_resp_counts'] = Counter(x).most_common()
+        items[item]['valid_resps'] = [resp for (resp, count) in items[item]['valid_resp_counts']]
 
-# create two co-occurrence matrices, each with one row and column per valid response
-# 'cooc_dat': number of co-occurrences for each valid response pair
-# 'succ_dat': number of co-occurrences in immediate succession
-L = [items[item]['valid_resps'] for item in items.keys()]
-R_0 = [r for resps in L for r in resps]
-R_1 = [check_p(resp) for resp in R_0 if "+-" not in resp]
+    # create two co-occurrence matrices, each with one row and column per valid response
+    # 'cooc_dat': number of co-occurrences for each valid response pair
+    # 'succ_dat': number of co-occurrences in immediate succession
+    L = [items[item]['valid_resps'] for item in items.keys()]
+    R_0 = [r for resps in L for r in resps]
+    R_1 = [check_p(resp) for resp in R_0 if "+-" not in resp]
 
-# used to create analysis dataframe of unique responses
-R = []
-for resp in R_1:
-    if resp not in R:
-        R.append(resp)
+    # used to create analysis dataframe of unique responses
+    R = []
+    for resp in R_1:
+        if resp not in R:
+            R.append(resp)
 
-cooc_dat = pd.DataFrame(data=np.zeros((len(R), len(R)), dtype=int), index=R, columns=R)
-succ_dat = pd.DataFrame(data=np.zeros((len(R), len(R)), dtype=int), index=R, columns=R)
+    cooc_dat = pd.DataFrame(data=np.zeros((len(R), len(R)), dtype=int), index=R, columns=R)
+    succ_dat = pd.DataFrame(data=np.zeros((len(R), len(R)), dtype=int), index=R, columns=R)
 
-for item in items.keys():
-    for resps in items[item]['resp_lists']:
-        if len(resps)>1:
-            for i in range(0, len(resps)-1):
-                for j in range(i+1, len(resps)):
-                    if resps[i] in items[item]['valid_resps'] and resps[j] in items[item]['valid_resps']:
-                        if "+-" not in resps[i] and "+-" not in resps[j]:
-                            r1 = check_p(resps[i])
-                            r2 = check_p(resps[j])
+    for item in items.keys():
+        for resps in items[item]['resp_lists']:
+            if len(resps)>1:
+                for i in range(0, len(resps)-1):
+                    for j in range(i+1, len(resps)):
+                        if resps[i] in items[item]['valid_resps'] and resps[j] in items[item]['valid_resps']:
+                            if "+-" not in resps[i] and "+-" not in resps[j]:
+                                r1 = check_p(resps[i])
+                                r2 = check_p(resps[j])
 
-                            cooc_dat.loc[r1, r2] += 1
-                            cooc_dat.loc[r2, r1] += 1
-                            if j==i+1:
-                                succ_dat.loc[r1, r2] += 1
-                                succ_dat.loc[r2, r1] += 1
+                                cooc_dat.loc[r1, r2] += 1
+                                cooc_dat.loc[r2, r1] += 1
+                                if j==i+1:
+                                    succ_dat.loc[r1, r2] += 1
+                                    succ_dat.loc[r2, r1] += 1
 
-# save the co-occurrence matrices
-#cooc_dat.to_excel("ANK_cooccurrence_all.xlsx")
-#succ_dat.to_excel("ANK_cooccurrence_successive.xlsx")
+    # save the co-occurrence matrices
+    cooc_dat.to_excel("ANK_cooccurrence_all.xlsx")
+    succ_dat.to_excel("ANK_cooccurrence_successive.xlsx")
+
+''' print responses with overall co-occurence > 100 and specified relation = 1'''
+def top_resps(df, relation):
+    return df.loc[df[relation] == 1,:].loc[df["Overall"] > 100,:]
+
+'''print random 10 responses with a relation with value (0 or 1)'''
+def rand_ten(df):
+    add_val_r = df.sample(n=10)
+    indices = add_val_r.index.value
+
+    return indices
+
+
+
+''' df: dataframe of all the data necessary for analysis
+    columns: Overall, Commutativity, Add_Decomp, Successive, Items
+    index: string with value "resp1, resp2 '''
+df = pd.read_csv("regression_dat.csv", header=0, index_col=0)
+
+# set types 
+df = df.astype({'Overall':str, 'Commutativity':int, 'Add_Decomp':int, 'Successive':int, 'Item':str})
+
+#create a dictionary of dataframes, split on Item (A, B, C, D, or E)
+item_spec = dict(tuple(df.groupby("Item")))
